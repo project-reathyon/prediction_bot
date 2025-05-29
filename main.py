@@ -7,9 +7,9 @@ from telegram.ext import (
     ContextTypes,
     CallbackQueryHandler,
 )
-# Corrected import for HTMLParseMode: it's in telegram.constants now.
+# Corrected import for ParseMode: it's directly under `telegram` now.
 from telegram.helpers import escape_markdown
-from telegram.constants import HTMLParseMode # Corrected import for HTMLParseMode
+from telegram import ParseMode # CORRECTED: Import ParseMode directly from telegram
 from dotenv import load_dotenv
 from model import get_top_predictions
 from scheduler import can_predict_today, register_prediction
@@ -80,7 +80,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "Use /help to see all available commands and learn more.\n\n"
         "Let's get started!"
     )
-    await update.message.reply_text(welcome_message, parse_mode=HTMLParseMode.HTML)
+    # Use ParseMode.HTML now
+    await update.message.reply_text(welcome_message, parse_mode=ParseMode.HTML)
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handles the /help command, providing a list of commands."""
@@ -92,7 +93,8 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "• /help – Display this help message\n\n"
         "Stay tuned for more features!"
     )
-    await update.message.reply_text(help_text, parse_mode=HTMLParseMode.HTML)
+    # Use ParseMode.HTML now
+    await update.message.reply_text(help_text, parse_mode=ParseMode.HTML)
 
 async def predict(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handles the /predict command, showing daily football predictions."""
@@ -103,7 +105,7 @@ async def predict(update: Update, context: ContextTypes.DEFAULT_TYPE):
                                         "To ensure fair usage and optimal performance, I can only provide "
                                         "predictions once per day globally. Please try again tomorrow! "
                                         "Thank you for your understanding.",
-                                        parse_mode=HTMLParseMode.HTML)
+                                        parse_mode=ParseMode.HTML) # Use ParseMode.HTML now
         return
 
     predictions = get_top_predictions()
@@ -112,7 +114,7 @@ async def predict(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not predictions:
         await update.message.reply_text("🗓️ <b>No predictions available for today yet!</b> 🗓️\n\n"
                                         "Please check back later or tomorrow.",
-                                        parse_mode=HTMLParseMode.HTML)
+                                        parse_mode=ParseMode.HTML) # Use ParseMode.HTML now
         return
 
     msg_parts = ["⚽ <b>Today's Top Football Predictions:</b> ⚽\n\n<pre><code>"]
@@ -136,7 +138,7 @@ async def predict(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         full_message,
         reply_markup=reply_markup,
-        parse_mode=HTMLParseMode.HTML
+        parse_mode=ParseMode.HTML # Use ParseMode.HTML now
     )
 
 async def handle_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -159,7 +161,7 @@ async def handle_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await query.edit_message_text(
         response_text,
-        parse_mode=HTMLParseMode.HTML
+        parse_mode=ParseMode.HTML # Use ParseMode.HTML now
     )
 
 # --- Handle all unexpected errors gracefully ---
@@ -172,7 +174,7 @@ async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> N
             await update.effective_message.reply_text(
                 "🚨 <b>Oops! Something went wrong.</b> 🚨\n"
                 "I've logged the error and our team will look into it. Please try again later.",
-                parse_mode=HTMLParseMode.HTML
+                parse_mode=ParseMode.HTML # Use ParseMode.HTML now
             )
         except Exception as e:
             logger.error(f"Failed to send error message to user: {e}", exc_info=True)
