@@ -1,6 +1,4 @@
-python-telegram-bot==20.7
-scikit-learn
-pandas
-loguru
-apscheduler
+python-telegram-bot
 python-dotenv
+loguru
+Flask
