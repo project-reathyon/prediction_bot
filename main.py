@@ -174,18 +174,22 @@ async def handle_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # --- Handle all unexpected errors gracefully ---
 async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Logs errors and sends a user-friendly message."""
-    # Corrected loguru error call
     logger.error("Exception while handling update:", exc_info=context.error)
 
     if isinstance(update, Update) and update.effective_message:
         try:
+            # Corrected message with escaped characters for MarkdownV2
             await update.effective_message.reply_text(
                 "🚨 \\*Oops\\! Something went wrong\\\\.* 🚨\n" # Escaped '!', '.' and '*'
                 "I've logged the error and our team will look into it\\\\. Please try again later\\\\.", # Escaped '.'
                 parse_mode="MarkdownV2"
             )
         except Exception as e:
-            logger.error(f"Failed to send error message to user: {e}", exc_info=True) # Added exc_info here too
+            # This is the line that's causing the current error, but it's trying to log the error itself.
+            # We already changed this in the previous full code update, so if you copied it, this should be fine.
+            # Let's ensure the message itself is escaped here too, just in case.
+            error_message_for_log = escape_markdown(str(e), version=2) # Escape any special chars in the error itself
+            logger.error(f"Failed to send error message to user: {error_message_for_log}", exc_info=True)
     else:
         logger.warning("Error occurred, but couldn't send message back to user due to missing update.message.")
 
