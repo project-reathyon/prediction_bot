@@ -1,3 +1,12 @@
+# First, update your requirements.txt
+# Add 'Flask' to it:
+# python-telegram-bot
+# python-dotenv
+# loguru
+# Flask  <-- ADD THIS LINE
+
+# Now, update your main.py
+
 import os
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
@@ -5,33 +14,33 @@ from telegram.ext import (
     CommandHandler,
     ContextTypes,
     CallbackQueryHandler,
-    # Added ConversationHandler and MessageHandler for future improvements
-    # and better bot flow, though not immediately used in current fixes.
-    # Also added Filters for message handling.
-    # Filters are in telegram.ext.filters, not directly in telegram.ext
-    # So, will add it later when introducing it for improvements.
 )
 from dotenv import load_dotenv
 from model import get_top_predictions
 from scheduler import can_predict_today, register_prediction
 from loguru import logger
 
+# Import Flask for the web server
+from flask import Flask, request
+
 # Load env vars
 load_dotenv()
 TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 
 if not TOKEN:
-    # Changed ValueError to a more specific error for clarity and easier debugging.
-    # Also, added a logger.error to ensure this critical issue is logged.
     logger.error("TELEGRAM_BOT_TOKEN is not set in environment variables. Bot cannot start.")
     raise EnvironmentError("TELEGRAM_BOT_TOKEN is not set in environment variables.")
+
+# --- Render Specific: Get the port and webhook URL from environment variables ---
+PORT = int(os.environ.get("PORT", "8443")) # Render provides a PORT env var
+WEBHOOK_URL = os.environ.get("WEBHOOK_URL") # You'll set this on Render
+
 
 # Define league names (for user-friendly responses)
 LEAGUE_NAMES = {
     "premier": "Premier League",
     "laliga": "La Liga",
     "seriea": "Serie A",
-    # Added "all" for a potential "show all predictions" button later.
     "all": "All Leagues"
 }
 
@@ -40,7 +49,6 @@ async def log_user_activity(update: Update):
     """Logs incoming requests from users."""
     user = update.effective_user
     chat = update.effective_chat
-    # Defensive programming: ensure user and chat exist.
     if not user or not chat:
         logger.warning("Received an update without an effective user or chat.")
         return
@@ -48,19 +56,18 @@ async def log_user_activity(update: Update):
     user_info = f"@{user.username}" if user.username else f"User ID: {user.id}"
     chat_info = f"Chat ID: {chat.id}"
 
-    msg_text = "No message text" # Default value
+    msg_text = "No message text"
 
     if update.message:
         msg_text = update.message.text
     elif update.callback_query:
         msg_text = update.callback_query.data
-    elif update.edited_message: # Log edited messages as well
+    elif update.edited_message:
         msg_text = update.edited_message.text
-    elif update.channel_post: # Log channel posts if the bot is in a channel
+    elif update.channel_post:
         msg_text = update.channel_post.text
-    elif update.edited_channel_post: # Log edited channel posts
+    elif update.edited_channel_post:
         msg_text = update.edited_channel_post.text
-    # Add more conditions for other update types if relevant (e.g., photos, documents)
 
     logger.info(f"[{chat_info}] {user_info}: {msg_text}")
 
@@ -69,8 +76,6 @@ async def log_user_activity(update: Update):
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handles the /start command, welcoming the user."""
     await log_user_activity(update)
-    # Using markdown_v2 for richer formatting and better control over escaped characters.
-    # Added more descriptive welcome message.
     welcome_message = (
         "👋 *Welcome to the Football Prediction Bot!* ⚽\n\n"
         "I can help you get daily top football predictions.\n\n"
@@ -90,18 +95,13 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "• /help – Display this help message\n\n"
         "Stay tuned for more features!"
     )
-    # Using MarkdownV2 for consistency and better formatting.
     await update.message.reply_text(help_text, parse_mode="MarkdownV2")
 
 async def predict(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handles the /predict command, showing daily football predictions."""
     await log_user_activity(update)
 
-    # Consider per-user prediction limits if this is a premium feature,
-    # otherwise, a global limit might be too restrictive.
-    # For now, sticking to the original logic, but this is an area for improvement.
     if not can_predict_today():
-        # Changed message to be more user-friendly and informative.
         await update.message.reply_text("⚠️ *Daily Prediction Limit Reached!* ⚠️\n\n"
                                         "To ensure fair usage and optimal performance, I can only provide "
                                         "predictions once per day globally\\. Please try again tomorrow\\! "
@@ -110,35 +110,29 @@ async def predict(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     predictions = get_top_predictions()
-    register_prediction() # Register the prediction *after* fetching it successfully.
+    register_prediction()
 
     if not predictions:
-        # Handle cases where no predictions are available.
         await update.message.reply_text("🗓️ *No predictions available for today yet\\!* 🗓️\n\n"
                                         "Please check back later or tomorrow\\.",
                                         parse_mode="MarkdownV2")
         return
 
-    # Improved message formatting for predictions. Using code block for predictions for clarity.
     msg_parts = ["⚽ *Today's Top Football Predictions:* ⚽\n\n```"]
     for i, p in enumerate(predictions):
-        # Ensure 'label' and 'confidence' keys exist to prevent KeyError.
         label = p.get('label', 'N/A')
         confidence = p.get('confidence', 'N/A')
         msg_parts.append(f"{i+1}. {label} (Confidence: {confidence}%)")
     msg_parts.append("```\n\n")
 
-    # Added a "Show All" button, assuming `get_top_predictions` can be filtered later.
-    # This also helps to demonstrate a more complete keyboard.
     keyboard = [
         [InlineKeyboardButton("🏴󠁧󠁢󠁥󠁮󠁧󠁿 Premier League", callback_data="premier")],
         [InlineKeyboardButton("🇪🇸 La Liga", callback_data="laliga")],
         [InlineKeyboardButton("🇮🇹 Serie A", callback_data="seriea")],
-        [InlineKeyboardButton("✨ Show All Predictions", callback_data="all")], # New button
+        [InlineKeyboardButton("✨ Show All Predictions", callback_data="all")],
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
 
-    # Joining the message parts.
     full_message = "".join(msg_parts) + "Select a league below to see more details (if available):"
 
     await update.message.reply_text(
@@ -151,13 +145,11 @@ async def handle_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handles inline keyboard button presses."""
     query = update.callback_query
     await log_user_activity(update)
-    await query.answer() # Always answer the callback query to remove the loading animation.
+    await query.answer()
 
     league_code = query.data
     league_name = LEAGUE_NAMES.get(league_code, "Unknown League")
 
-    # This is a placeholder. In a real bot, you'd fetch predictions *specifically* for that league.
-    # For now, just a friendly message.
     if league_code == "all":
         response_text = "✨ *Showing All Available Predictions!* ✨\n" \
                         "This feature is under development\\. For now, the initial prediction message " \
@@ -167,8 +159,6 @@ async def handle_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         "This feature is currently under development\\. Please check back later for " \
                         "league-specific predictions\\."
 
-    # Using edit_message_text to update the original message, which is a better UX.
-    # Ensure parse_mode is set.
     await query.edit_message_text(
         response_text,
         parse_mode="MarkdownV2"
@@ -179,10 +169,8 @@ async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> N
     """Logs errors and sends a user-friendly message."""
     logger.error(msg="Exception while handling update:", exc_info=context.error)
 
-    # Check if update is an instance of Update and has a message attribute before trying to reply.
     if isinstance(update, Update) and update.effective_message:
         try:
-            # Provide a more specific error message based on the user's last action, if possible.
             await update.effective_message.reply_text(
                 "🚨 *Oops! Something went wrong\\.* 🚨\n"
                 "I've logged the error and our team will look into it\\. Please try again later\\.",
@@ -194,16 +182,45 @@ async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> N
         logger.warning("Error occurred, but couldn't send message back to user due to missing update.message.")
 
 
-# Build and start bot
+# --- Main bot application setup ---
 app = ApplicationBuilder().token(TOKEN).build()
 
-# Register handlers
 app.add_handler(CommandHandler("start", start))
 app.add_handler(CommandHandler("help", help_command))
 app.add_handler(CommandHandler("predict", predict))
 app.add_handler(CallbackQueryHandler(handle_button))
 app.add_error_handler(error_handler)
 
+# --- Webhook setup using Flask ---
+flask_app = Flask(__name__)
+
+@flask_app.post("/")
+async def webhook_handler():
+    """Handle incoming Telegram updates via webhook."""
+    # Convert incoming request body to Telegram Update object
+    update = Update.de_json(request.get_json(force=True), app.bot)
+    # Process the update with the bot's application
+    await app.process_update(update)
+    return "ok"
+
 if __name__ == "__main__":
     logger.info("Starting Football Prediction Bot...")
-    app.run_polling()
+
+    if WEBHOOK_URL:
+        # Set up the webhook with Telegram
+        logger.info(f"Setting webhook to {WEBHOOK_URL}")
+        # Use app.bot.set_webhook() inside an async context
+        # This requires running the Flask app to create the event loop
+        # A simple way to do this is to set it up before starting the Flask app.
+        import asyncio
+        async def setup_webhook():
+            await app.bot.set_webhook(url=WEBHOOK_URL)
+            logger.info("Webhook set successfully.")
+        asyncio.run(setup_webhook())
+
+        # Start the Flask web server
+        flask_app.run(host="0.0.0.0", port=PORT)
+    else:
+        # Fallback to polling for local development or if WEBHOOK_URL isn't set
+        logger.warning("WEBHOOK_URL not set. Running in polling mode. This is not recommended for Render Web Services.")
+        app.run_polling()
