@@ -10,7 +10,7 @@ load_dotenv()
 TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("⚽ Welcome to the Football Prediction Bot!
+    await update.message.reply_text("⚽ Welcome to the Football Prediction Bot!")
 Use /predict to get today’s top predictions.")
 
 async def predict(update: Update, context: ContextTypes.DEFAULT_TYPE):
