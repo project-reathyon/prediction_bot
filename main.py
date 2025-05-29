@@ -7,9 +7,9 @@ from telegram.ext import (
     ContextTypes,
     CallbackQueryHandler,
 )
-# Corrected import for ParseMode: it's directly under `telegram` now.
+# Corrected import for ParseMode: it's in telegram.constants.
 from telegram.helpers import escape_markdown
-from telegram import ParseMode # CORRECTED: Import ParseMode directly from telegram
+from telegram.constants import ParseMode # CORRECTED: Import ParseMode from telegram.constants
 from dotenv import load_dotenv
 from model import get_top_predictions
 from scheduler import can_predict_today, register_prediction
