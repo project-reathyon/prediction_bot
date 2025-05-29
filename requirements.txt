@@ -3,4 +3,4 @@ python-dotenv
 loguru
 Flask[async]
 gunicorn
-geventwebsocket
+uvicorn
