@@ -7,8 +7,9 @@ from telegram.ext import (
     ContextTypes,
     CallbackQueryHandler,
 )
-# Import escape_markdown from telegram.helpers
-from telegram.helpers import escape_markdown, HTMLParseMode # Also import HTMLParseMode for robustness later
+# Corrected import for HTMLParseMode: it's in telegram.constants now.
+from telegram.helpers import escape_markdown
+from telegram.constants import HTMLParseMode # Corrected import for HTMLParseMode
 from dotenv import load_dotenv
 from model import get_top_predictions
 from scheduler import can_predict_today, register_prediction
@@ -72,8 +73,6 @@ async def log_user_activity(update: Update):
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handles the /start command, welcoming the user."""
     await log_user_activity(update)
-    # Use HTML for simpler escaping if MarkdownV2 is too tricky for general text
-    # Or meticulously escape every character. Let's try HTML for simplicity for now.
     welcome_message = (
         "👋 <b>Welcome to the Football Prediction Bot!</b> ⚽\n\n"
         "I can help you get daily top football predictions.\n\n"
@@ -81,7 +80,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "Use /help to see all available commands and learn more.\n\n"
         "Let's get started!"
     )
-    # Changed parse_mode to HTML
     await update.message.reply_text(welcome_message, parse_mode=HTMLParseMode.HTML)
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -94,7 +92,6 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "• /help – Display this help message\n\n"
         "Stay tuned for more features!"
     )
-    # Changed parse_mode to HTML
     await update.message.reply_text(help_text, parse_mode=HTMLParseMode.HTML)
 
 async def predict(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -106,7 +103,7 @@ async def predict(update: Update, context: ContextTypes.DEFAULT_TYPE):
                                         "To ensure fair usage and optimal performance, I can only provide "
                                         "predictions once per day globally. Please try again tomorrow! "
                                         "Thank you for your understanding.",
-                                        parse_mode=HTMLParseMode.HTML) # Changed parse_mode
+                                        parse_mode=HTMLParseMode.HTML)
         return
 
     predictions = get_top_predictions()
@@ -115,16 +112,13 @@ async def predict(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not predictions:
         await update.message.reply_text("🗓️ <b>No predictions available for today yet!</b> 🗓️\n\n"
                                         "Please check back later or tomorrow.",
-                                        parse_mode=HTMLParseMode.HTML) # Changed parse_mode
+                                        parse_mode=HTMLParseMode.HTML)
         return
 
-    # Use HTML for overall structure.
-    # For the prediction list, wrap it in <pre><code> for preformatted text, which handles special chars
     msg_parts = ["⚽ <b>Today's Top Football Predictions:</b> ⚽\n\n<pre><code>"]
     for i, p in enumerate(predictions):
         label = p.get('label', 'N/A')
         confidence = p.get('confidence', 'N/A')
-        # No need to escape here, as <pre><code> will handle it
         msg_parts.append(f"{i+1}. {label} (Confidence: {confidence}%)")
     msg_parts.append("</code></pre>\n\n")
 
@@ -142,14 +136,14 @@ async def predict(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         full_message,
         reply_markup=reply_markup,
-        parse_mode=HTMLParseMode.HTML # Changed parse_mode
+        parse_mode=HTMLParseMode.HTML
     )
 
 async def handle_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handles inline keyboard button presses."""
     query = update.callback_query
-    await query.answer() # Always answer the callback query to remove the loading animation.
-    await log_user_activity(update) # Log AFTER answering query
+    await query.answer()
+    await log_user_activity(update)
 
     league_code = query.data
     league_name = LEAGUE_NAMES.get(league_code, "Unknown League")
@@ -165,7 +159,7 @@ async def handle_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await query.edit_message_text(
         response_text,
-        parse_mode=HTMLParseMode.HTML # Changed parse_mode
+        parse_mode=HTMLParseMode.HTML
     )
 
 # --- Handle all unexpected errors gracefully ---
@@ -175,7 +169,6 @@ async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> N
 
     if isinstance(update, Update) and update.effective_message:
         try:
-            # Changed to HTML parse_mode for the error message as well
             await update.effective_message.reply_text(
                 "🚨 <b>Oops! Something went wrong.</b> 🚨\n"
                 "I've logged the error and our team will look into it. Please try again later.",
