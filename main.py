@@ -7,8 +7,8 @@ from telegram.ext import (
     ContextTypes,
     CallbackQueryHandler,
 )
-from telegram.helpers import escape_markdown
-from telegram import ParseMode
+# Corrected ParseMode import for python-telegram-bot v20+
+from telegram.constants import ParseMode
 from dotenv import load_dotenv
 from model import get_top_predictions
 from scheduler import can_predict_today, register_prediction
@@ -38,18 +38,7 @@ LEAGUE_NAMES = {
     "all": "All Leagues"
 }
 
-# --- Initialize the Telegram Application globally but *without* starting an event loop ---
-# We build the application here.
-app = ApplicationBuilder().token(TOKEN).build()
-
-# The actual initialization and webhook setting will happen when Hypercorn starts.
-
-# --- Register handlers for your bot commands and callbacks ---
-app.add_handler(CommandHandler("start", start))
-app.add_handler(CommandHandler("help", help_command))
-app.add_handler(CommandHandler("predict", predict))
-app.add_handler(CallbackQueryHandler(handle_button))
-app.add_error_handler(error_handler)
+# --- Handler function definitions MUST come before they are registered ---
 
 # --- Safe logger to track user activity ---
 async def log_user_activity(update: Update):
@@ -105,19 +94,28 @@ async def predict(update: Update, context: ContextTypes.DEFAULT_TYPE):
                                         "Thank you for your understanding.",
                                         parse_mode=ParseMode.HTML)
         return
-    predictions = get_top_predictions()
-    register_prediction()
+
+    predictions = get_top_predictions() # Assume this function is defined elsewhere
+    register_prediction() # Assume this function is defined elsewhere
+
     if not predictions:
         await update.message.reply_text("🗓️ <b>No predictions available for today yet!</b> 🗓️\n\n"
                                         "Please check back later or tomorrow.",
                                         parse_mode=ParseMode.HTML)
         return
+
     msg_parts = ["⚽ <b>Today's Top Football Predictions:</b> ⚽\n\n<pre><code>"]
     for i, p in enumerate(predictions):
         label = p.get('label', 'N/A')
         confidence = p.get('confidence', 'N/A')
-        msg_parts.append(f"{i+1}. {label} (Confidence: {confidence}%)")
+        # Ensuring confidence is formatted nicely if it's a number
+        try:
+            confidence_str = f"{float(confidence):.2f}" if isinstance(confidence, (float, int)) else str(confidence)
+        except ValueError:
+            confidence_str = str(confidence)
+        msg_parts.append(f"{i+1}. {label} (Confidence: {confidence_str}%)")
     msg_parts.append("</code></pre>\n\n")
+
     keyboard = [
         [InlineKeyboardButton("🏴󠁧󠁢󠁥󠁮󠁧󠁿 Premier League", callback_data="premier")],
         [InlineKeyboardButton("🇪🇸 La Liga", callback_data="laliga")],
@@ -136,9 +134,10 @@ async def predict(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def handle_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
-    await log_user_activity(update)
+    await log_user_activity(update) # Log after answering to ensure responsiveness
     league_code = query.data
     league_name = LEAGUE_NAMES.get(league_code, "Unknown League")
+
     if league_code == "all":
         response_text = "✨ <b>Showing All Available Predictions!</b> ✨\n" \
                         "This feature is under development. For now, the initial prediction message " \
@@ -164,8 +163,32 @@ async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> N
             )
         except Exception as e:
             logger.error(f"Failed to send error message to user: {e}", exc_info=True)
+    elif isinstance(update, Update) and update.callback_query: # Handle errors in callbacks too
+        try:
+            await update.callback_query.message.reply_text(
+                 "🚨 <b>Oops! Something went wrong with that action.</b> 🚨\n"
+                "I've logged the error. Please try again later.",
+                parse_mode=ParseMode.HTML
+            )
+        except Exception as e:
+            logger.error(f"Failed to send error message to user after callback query error: {e}", exc_info=True)
     else:
-        logger.warning("Error occurred, but couldn't send message back to user due to missing update.message.")
+        logger.warning("Error occurred, but couldn't send message back to user due to missing update.message or update.callback_query.")
+
+
+# --- Initialize the Telegram Application globally ---
+# We build the application here.
+app = ApplicationBuilder().token(TOKEN).build()
+
+# The actual initialization and webhook setting will happen when Hypercorn starts.
+
+# --- Register handlers for your bot commands and callbacks ---
+# These are now registered AFTER the functions are defined
+app.add_handler(CommandHandler("start", start))
+app.add_handler(CommandHandler("help", help_command))
+app.add_handler(CommandHandler("predict", predict))
+app.add_handler(CallbackQueryHandler(handle_button))
+app.add_error_handler(error_handler)
 
 
 # --- Flask Webhook Endpoint ---
@@ -177,30 +200,59 @@ flask_app = Flask(__name__)
 async def startup_event():
     """Initializes the PTB application and sets the webhook before Hypercorn starts serving requests."""
     logger.info("Running startup event for PTB Application.")
+    # Ensure an event loop is available for PTB's async operations during startup
+    # This might not be strictly necessary if Hypercorn sets one up, but can be a safeguard
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        asyncio.set_event_loop(asyncio.new_event_loop())
+
     await app.initialize()
     logger.info("Telegram Application initialized.")
     if WEBHOOK_URL:
         try:
-            await app.bot.set_webhook(url=WEBHOOK_URL)
+            await app.bot.set_webhook(url=WEBHOOK_URL, allowed_updates=Update.ALL_TYPES)
             logger.info(f"Webhook set successfully to {WEBHOOK_URL}.")
         except Exception as e:
             logger.error(f"Failed to set webhook: {e}", exc_info=True)
     else:
-        logger.warning("WEBHOOK_URL not set. Skipping webhook setup.")
+        logger.warning("WEBHOOK_URL not set. Skipping webhook setup. Bot will not receive updates via webhook.")
 
 @flask_app.post("/")
 async def webhook_handler():
     try:
-        request_json = request.get_json(force=True)
-        logger.info(f"Received webhook update: {request_json}")
+        request_json = await request.get_json(force=True) # Use await for async flask
+        # logger.debug(f"Received webhook update (raw): {request_json}") # DEBUG level if too verbose
         update = Update.de_json(request_json, app.bot)
+        # logger.debug(f"Deserialized update: {update}") # DEBUG level
         await app.process_update(update)
-        return "ok"
+        return "ok", 200
     except Exception as e:
         logger.error(f"Error processing webhook update in webhook_handler: {e}", exc_info=True)
         return "error", 500
 
 # We don't run flask_app.run() or asyncio.run() here because Hypercorn manages the server.
 if __name__ == "__main__":
-    logger.info("Bot script executed. Hypercorn will manage the Flask application and PTB lifecycle.")
-    # No direct `app.run_polling()` or `flask_app.run()` here. Hypercorn handles it.
+    logger.info("Bot script executed. Hypercorn should manage the Flask application and PTB lifecycle.")
+    # For local testing without Hypercorn and WEBHOOK_URL set, you might add polling:
+    # if not WEBHOOK_URL:
+    #     logger.info("WEBHOOK_URL not found, attempting to run in polling mode for local testing.")
+    #     # PTB's Application.run_polling() needs to be run in an asyncio event loop.
+    #     # However, Flask's development server (flask_app.run()) is not async by default
+    #     # and mixing it with PTB's asyncio polling directly here can be complex.
+    #     # It's generally better to decide on one deployment strategy (webhook or polling)
+    #     # or use different entry points/configurations for them.
+    #     # The current setup is primarily for webhook with Hypercorn.
+    #     # If you absolutely need to run polling from this script directly:
+    #     # async def main_polling():
+    #     #     await app.initialize()
+    #     #     await app.start()
+    #     #     await app.updater.start_polling() # For older PTB versions with Updater
+    #     #     # For PTB v20+ Application
+    #     #     await app.run_polling()
+    #     #
+    #     # if not WEBHOOK_URL:
+    #     #    asyncio.run(main_polling())
+    # else:
+    #    logger.info("WEBHOOK_URL is set. Assuming server (like Hypercorn) will run the app.")
+    pass
