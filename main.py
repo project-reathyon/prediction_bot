@@ -167,11 +167,14 @@ _actual_flask_app = Flask(__name__)
 @_actual_flask_app.post("/") # Use the specific Flask app instance for routing
 async def webhook_handler(): # Flask supports async route handlers when run with ASGI
     try:
-        request_json = await request.get_json(force=True)
+        # Corrected: request.get_json() is synchronous and directly returns a dict
+        request_json = request.get_json(force=True)
+        
         update = Update.de_json(request_json, ptb_application.bot) # Use ptb_application.bot
         await ptb_application.process_update(update) # Use ptb_application.process_update
         return "ok", 200
     except Exception as e:
+        # The error was occurring in the try block above, this except block logs it.
         logger.error(f"Error processing webhook update in webhook_handler: {e}", exc_info=True)
         return "error", 500
 
@@ -235,6 +238,4 @@ if __name__ == "__main__":
         "Bot script executed. If run directly, it's designed for an ASGI server like Hypercorn "
         "to manage the 'flask_app' (ASGI wrapper) object and its lifecycle."
     )
-    # The script is primarily intended to be run by Hypercorn.
-    # Polling logic for local testing would typically be separate or conditionally run.
     pass
