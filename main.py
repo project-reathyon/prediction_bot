@@ -160,7 +160,7 @@ ptb_application.add_handler(CallbackQueryHandler(handle_button))
 ptb_application.add_error_handler(error_handler)
 
 # --- Flask Web Application Instance ---
-# This is your Flask app, we'll give it a distinct name for clarity
+# This is your actual Flask app instance, used for defining routes.
 _actual_flask_app = Flask(__name__)
 
 # --- Flask Webhook Endpoint ---
@@ -187,8 +187,6 @@ async def run_ptb_startup_tasks():
             logger.info(f"Webhook set successfully to {WEBHOOK_URL}.")
         except Exception as e:
             logger.error(f"Failed to set webhook: {e}", exc_info=True)
-            # Depending on severity, you might want to raise an error here
-            # to prevent the app from starting if webhook setup is critical.
     else:
         logger.warning("WEBHOOK_URL not set. Skipping webhook setup. Bot will not receive updates via webhook.")
 
@@ -224,31 +222,19 @@ class ASGIAppWithLifespan:
                     return # Important to return after shutdown
         elif scope['type'] == 'http':
             await self.flask_asgi_app(scope, receive, send)
-        # You could add other scope types like 'websocket' if needed
 
-# This 'application' is the ASGI app that Hypercorn should run.
-# Your Hypercorn command should be: hypercorn main:application --bind 0.0.0.0:${PORT}
-application = ASGIAppWithLifespan(_actual_flask_app)
+# --- Create the final ASGI application object for Hypercorn ---
+# To match your existing Hypercorn command `hypercorn main:flask_app ...`,
+# we name the final ASGI-compliant application object `flask_app`.
+# This `flask_app` is now our ASGI wrapper, not the raw Flask instance.
+flask_app = ASGIAppWithLifespan(_actual_flask_app)
 
 
 if __name__ == "__main__":
     logger.info(
-        "Bot script executed. Hypercorn should manage the ASGI 'application' object and its lifecycle."
+        "Bot script executed. If run directly, it's designed for an ASGI server like Hypercorn "
+        "to manage the 'flask_app' (ASGI wrapper) object and its lifecycle."
     )
-    # This script is designed to be run by an ASGI server like Hypercorn.
-    # For local testing without Hypercorn (e.g., with polling if WEBHOOK_URL is not set),
-    # you would need a different execution block here, potentially involving asyncio.run()
-    # and ptb_application.run_polling(). However, that would bypass the Flask/webhook setup.
-    # Example for polling (mutually exclusive with webhook setup):
-    # async def main_polling():
-    #     await ptb_application.initialize()
-    #     # await ptb_application.bot.delete_webhook() # If switching from webhook to polling
-    #     logger.info("Starting bot in polling mode...")
-    #     await ptb_application.run_polling(allowed_updates=Update.ALL_TYPES)
-
-    # if not WEBHOOK_URL and TOKEN:
-    #     logger.info("WEBHOOK_URL not found, attempting to run in polling mode for local testing.")
-    #     asyncio.run(main_polling())
-    # else:
-    #     logger.info("WEBHOOK_URL is set or TOKEN is missing. Polling mode not started.")
+    # The script is primarily intended to be run by Hypercorn.
+    # Polling logic for local testing would typically be separate or conditionally run.
     pass
